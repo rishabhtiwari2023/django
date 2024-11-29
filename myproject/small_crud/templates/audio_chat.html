@@ -1,0 +1,64 @@
+<!-- templates/audio_chat.html -->
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Audio Chat</title>
+</head>
+<body>
+    <h1>Audio Chat</h1>
+    <audio id="remoteAudio" autoplay></audio>
+    <script>
+        const roomName = "{{ room_name }}";
+        const ws = new WebSocket(`ws://${window.location.host}/ws/audio/${roomName}/`);
+
+        ws.onmessage = function(event) {
+            const data = JSON.parse(event.data);
+            if (data.message.type === 'offer') {
+                handleOffer(data.message);
+            } else if (data.message.type === 'answer') {
+                handleAnswer(data.message);
+            } else if (data.message.type === 'candidate') {
+                handleCandidate(data.message);
+            }
+        };
+
+        const peerConnection = news({
+            iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+        });
+
+        peerConnection.onicecandidate = function(event) {
+            if (event.candidate) {
+                ws.send(JSON.stringify({ message: { type: 'candidate', candidate: event.candidate } }));
+            }
+        };
+
+        peerConnection.ontrack = function(event) {
+            document.getElementById('remoteAudio').srcObject = event.streams[0];
+        };
+
+        navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+            stream.getTracks().forEach(track => peerConnection.addTrack(track, stream));
+            peerConnection.createOffer().then(offer => {
+                peerConnection.setLocalDescription(offer);
+                ws.send(JSON.stringify({ message: offer }));
+            });
+        });
+
+        function handleOffer(offer) {
+            peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+            peerConnection.createAnswer().then(answer => {
+                peerConnection.setLocalDescription(answer);
+                ws.send(JSON.stringify({ message: answer }));
+            });
+        }
+
+        function handleAnswer(answer) {
+            peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+        }
+
+        function handleCandidate(candidate) {
+            peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+        }
+    </script>
+</body>
+</html>
