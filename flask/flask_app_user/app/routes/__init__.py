@@ -1,0 +1,1 @@
+from .user_routes import initialize_routes
